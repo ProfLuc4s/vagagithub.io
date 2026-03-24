@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Desafio do Douglas</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;900&display=swap');
+        
+        body {
+            font-family: 'Nunito', sans-serif;
+            background-color: #f0f9ff;
+            touch-action: manipulation; /* Evita zoom duplo no tablet */
+            user-select: none; /* Evita selecionar texto sem querer no tablet */
+            overflow-x: hidden; /* Permite rolar para baixo se a tela do tablet for menor */
+        }
+
+        /* Botões gamificados com efeito de afundar 3D */
+        .btn-3d {
+            transition: all 0.1s;
+        }
+        .btn-3d:active {
+            transform: translateY(8px);
+            box-shadow: 0 0px 0 0 transparent !important;
+        }
+
+        /* Estilos de Dinheiro */
+        .money-btn {
+            transition: transform 0.1s;
+            cursor: pointer;
+        }
+        .money-btn:active {
+            transform: scale(0.9);
+        }
+
+        .bill {
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 900;
+            text-shadow: 1px 1px 0px rgba(255,255,255,0.5);
+            border: 2px solid rgba(0,0,0,0.1);
+        }
+        .bill-2 { background: linear-gradient(135deg, #86efac, #4ade80); color: #064e3b; box-shadow: 0 6px 0 0 #166534; }
+        .bill-5 { background: linear-gradient(135deg, #fca5a5, #f87171); color: #450a0a; box-shadow: 0 6px 0 0 #7f1d1d; }
+        .bill-10 { background: linear-gradient(135deg, #fdba74, #fb923c); color: #431407; box-shadow: 0 6px 0 0 #7c2d12; }
+        .bill-20 { background: linear-gradient(135deg, #93c5fd, #60a5fa); color: #1e3a8a; box-shadow: 0 6px 0 0 #1e3a8a; }
+        .bill-50 { background: linear-gradient(135deg, #fcd34d, #fbbf24); color: #451a03; box-shadow: 0 6px 0 0 #78350f; }
+        
+        .coin {
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 900;
+            border: 4px solid #d1d5db;
+        }
+        .coin-50 { background: linear-gradient(135deg, #fef08a, #fde047); color: #713f12; box-shadow: 0 5px 0 0 #a16207; border-color: #facc15; }
+        .coin-1 { background: linear-gradient(135deg, #e5e7eb, #d1d5db); color: #1f2937; box-shadow: 0 5px 0 0 #4b5563; border-color: #9ca3af; }
+
+        .selected-money-item {
+            animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        @keyframes popIn {
+            0% { transform: scale(0); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .pulse-green {
+            animation: pulse-success 1.5s infinite;
+        }
+
+        @keyframes pulse-success {
+            0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7), 0 8px 0 0 #166534; transform: scale(1); }
+            50% { box-shadow: 0 0 0 25px rgba(34, 197, 94, 0), 0 8px 0 0 #166534; transform: scale(1.02); }
+            100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0), 0 8px 0 0 #166534; transform: scale(1); }
+        }
+
+        /* Ocultar elementos */
+        .hidden-screen {
+            display: none !important;
+        }
+    </style>
+</head>
+<body class="min-h-screen w-full flex flex-col bg-blue-50">
+
+    <!-- TELA INICIAL (BOAS-VINDAS) -->
+    <div id="welcome-screen" class="absolute inset-0 z-50 flex flex-col items-center justify-center bg-yellow-300 px-4 text-center">
+        <div class="text-9xl mb-6 animate-bounce">👦🏽💳</div>
+        <h1 class="text-4xl md:text-6xl font-black text-blue-900 mb-12 leading-tight drop-shadow-md">
+            E aí Douglas,<br>pronto para o desafio de dinheiro?
+        </h1>
+        <button onclick="startGame()" class="btn-3d text-3xl md:text-5xl bg-green-500 text-white font-black py-6 px-16 rounded-full shadow-[0_10px_0_0_#166534] border-4 border-green-400">
+            SIM! VAMOS LÁ! 🚀
+        </button>
+    </div>
+
+    <!-- TELA DO JOGO -->
+    <div id="game-screen" class="hidden-screen flex-1 flex flex-col w-full max-w-5xl mx-auto bg-white shadow-2xl">
+        
+        <!-- Cabeçalho / Nível -->
+        <div class="bg-blue-600 p-4 flex justify-between items-center text-white shadow-md z-10">
+            <div class="flex items-center gap-3">
+                <div class="bg-blue-800 rounded-full h-12 w-12 flex items-center justify-center text-2xl font-bold shadow-inner">
+                    <span id="level-indicator">1</span>
+                </div>
+                <h2 id="level-name" class="text-2xl font-bold">Nível das Moedas</h2>
+            </div>
+            <div class="text-xl font-bold bg-blue-500 px-4 py-2 rounded-xl">
+                Item <span id="item-progress">1/3</span>
+            </div>
+        </div>
+
+        <!-- Área Principal (Tablet Split: Em cima o produto, embaixo a interação) -->
+        <div class="flex-1 flex flex-col md:flex-row">
+            
+            <!-- ESQUERDA / CIMA: O que comprar -->
+            <div class="flex-1 bg-blue-50 p-6 flex flex-col items-center justify-center border-b-4 md:border-b-0 md:border-r-4 border-dashed border-blue-200">
+                <h3 id="action-title" class="text-2xl font-bold text-gray-500 mb-2">Você quer comprar:</h3>
+                <div id="item-emoji" class="text-8xl md:text-[10rem] drop-shadow-xl mb-4 transition-transform hover:scale-110">🍎</div>
+                <h2 id="item-name" class="text-4xl font-black text-gray-800 mb-4 text-center">Maçã</h2>
+                
+                <div class="bg-yellow-400 px-8 py-4 rounded-3xl shadow-[0_6px_0_0_#ca8a04] border-4 border-yellow-300 transform -rotate-2 w-full max-w-sm text-center">
+                    <span class="text-3xl md:text-4xl font-black text-gray-900">
+                        Preço: R$ <span id="item-price">0,00</span>
+                    </span>
+                </div>
+
+                <!-- Nova área para o TROCO (escondida por padrão) -->
+                <div id="change-container" class="hidden flex-col items-center w-full max-w-sm mt-6 gap-3">
+                    <div class="bg-green-100 border-4 border-green-400 rounded-2xl p-4 w-full flex items-center justify-between shadow-md">
+                        <span class="text-xl md:text-2xl font-bold text-green-800">Pagou com:</span>
+                        <span id="paid-amount" class="text-2xl md:text-3xl font-black text-green-900">R$ 0,00</span>
+                    </div>
+                    <div class="bg-blue-500 text-white rounded-full px-6 py-3 shadow-md animate-pulse">
+                        <span class="text-xl md:text-2xl font-bold">Qual é o troco? 🤔</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- DIREITA / BAIXO: A carteira e a bandeja -->
+            <div class="flex-1 flex flex-col bg-white overflow-y-auto">
+                
+                <!-- Bandeja (Dinheiro que ele separou) -->
+                <div class="p-6 bg-gray-50 flex-1 border-b-4 border-gray-100 flex flex-col">
+                    <h3 id="tray-title" class="text-xl font-bold text-gray-600 mb-2 flex justify-between items-center">
+                        <span>Sua Bandeja:</span>
+                        <span class="text-sm font-normal text-gray-400">(Toque no dinheiro para remover)</span>
+                    </h3>
+                    
+                    <div id="selected-tray" class="flex-1 bg-white border-4 border-gray-200 rounded-2xl p-4 flex flex-wrap content-start gap-3 overflow-y-auto min-h-[120px]">
+                        <!-- O dinheiro selecionado aparece aqui -->
+                    </div>
+
+                    <div class="mt-4 flex items-center justify-between bg-blue-100 p-4 rounded-2xl border-2 border-blue-200">
+                        <span class="text-2xl font-bold text-blue-800">Total na bandeja:</span>
+                        <span id="current-total" class="text-4xl font-black text-blue-600">R$ 0,00</span>
+                    </div>
+                </div>
+
+                <!-- Botão Pagar -->
+                <div class="p-4 bg-white z-10 shrink-0">
+                    <button onclick="checkPayment()" id="btn-pay" class="btn-3d w-full bg-gray-300 text-gray-500 font-black py-6 rounded-2xl text-3xl shadow-[0_8px_0_0_#9ca3af] pointer-events-none transition-all">
+                        PAGAR 🛒
+                    </button>
+                </div>
+
+                <!-- Carteira (Botões para adicionar dinheiro) -->
+                <div class="p-4 bg-gray-100 border-t-4 border-gray-200 pb-8 shrink-0">
+                    <h3 class="text-center font-bold text-gray-500 mb-4 text-lg">Toque no dinheiro para colocar na bandeja:</h3>
+                    
+                    <div id="wallet-container" class="flex flex-wrap justify-center gap-4">
+                        <!-- Botões de dinheiro gerados via JS dependendo do nível -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- OVERLAY DE SUCESSO -->
+    <div id="success-overlay" class="hidden-screen absolute inset-0 z-50 flex items-center justify-center bg-black bg-opacity-80 p-4 backdrop-blur-sm">
+        <div class="bg-white rounded-[3rem] p-10 text-center max-w-lg w-full shadow-2xl border-8 border-yellow-400 transform transition-transform scale-100">
+            <div class="text-8xl mb-6 animate-bounce">🌟</div>
+            <h2 id="success-title" class="text-5xl font-black text-green-500 mb-4">MUITO BEM!</h2>
+            <p id="success-msg" class="text-2xl text-gray-600 mb-8 font-bold">Você pagou certinho!</p>
+            <button onclick="nextItem()" class="btn-3d w-full bg-blue-500 text-white font-black py-6 rounded-2xl text-3xl shadow-[0_8px_0_0_#1d4ed8]">
+                PRÓXIMO DESAFIO ➡️
+            </button>
+        </div>
+    </div>
+
+    <!-- OVERLAY FIM DE JOGO -->
+    <div id="end-overlay" class="hidden-screen absolute inset-0 z-50 flex items-center justify-center bg-blue-500 p-4">
+        <div class="bg-white rounded-[3rem] p-10 text-center max-w-2xl w-full shadow-2xl border-8 border-white">
+            <div class="text-9xl mb-6">🏆</div>
+            <h2 class="text-6xl font-black text-blue-600 mb-4">CAMPEÃO!</h2>
+            <p class="text-3xl text-gray-700 mb-8 font-bold">Douglas, você completou todos os níveis e é um mestre do dinheiro!</p>
+            <button onclick="resetGame()" class="btn-3d w-full bg-green-500 text-white font-black py-6 rounded-2xl text-3xl shadow-[0_8px_0_0_#166534]">
+                JOGAR DE NOVO 🔄
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // CONFIGURAÇÃO DOS NÍVEIS PARA O DOUGLAS
+        const gameLevels = [
+            {
+                id: 1,
+                name: "Só Moedas",
+                type: "exact",
+                allowedMoney: [0.5, 1],
+                items: [
+                    { name: "Bala", price: 0.50, emoji: "🍬" },
+                    { name: "Paçoca", price: 1.00, emoji: "🥜" },
+                    { name: "Chiclete", price: 1.50, emoji: "🫧" },
+                    { name: "Água", price: 2.00, emoji: "💧" },
+                    { name: "Suco", price: 2.50, emoji: "🧃" }
+                ]
+            },
+            {
+                id: 2,
+                name: "Notas Pequenas",
+                type: "exact",
+                allowedMoney: [0.5, 1, 2, 5],
+                items: [
+                    { name: "Sorvete", price: 3.00, emoji: "🍦" },
+                    { name: "Salgado", price: 4.00, emoji: "🥟" },
+                    { name: "Pipoca", price: 5.00, emoji: "🍿" },
+                    { name: "Refrigerante", price: 6.00, emoji: "🥤" },
+                    { name: "Sanduíche", price: 7.00, emoji: "🥪" },
+                    { name: "Bolo", price: 8.50, emoji: "🍰" }
+                ]
+            },
+            {
+                id: 3,
+                name: "Notas Grandes",
+                type: "exact",
+                allowedMoney: [1, 2, 5, 10, 20, 50],
+                items: [
+                    { name: "Carrinho", price: 12.00, emoji: "🏎️" },
+                    { name: "Lápis de Cor", price: 15.00, emoji: "🖍️" },
+                    { name: "Urso", price: 20.00, emoji: "🧸" },
+                    { name: "Bola", price: 35.00, emoji: "⚽" },
+                    { name: "Jogo", price: 50.00, emoji: "🎲" }
+                ]
+            },
+            {
+                id: 4,
+                name: "Misturando Tudo",
+                type: "exact",
+                allowedMoney: [0.5, 1, 2, 5, 10, 20, 50],
+                items: [
+                    { name: "Apontador", price: 2.50, emoji: "✏️" },
+                    { name: "Estojo", price: 8.50, emoji: "👝" },
+                    { name: "Caderno", price: 15.50, emoji: "📓" },
+                    { name: "Mochila", price: 42.00, emoji: "🎒" }
+                ]
+            },
+            {
+                id: 5,
+                name: "Aprendendo o Troco",
+                type: "change",
+                allowedMoney: [1, 2, 5, 10],
+                items: [
+                    { name: "Bala", price: 1.00, emoji: "🍬", paid: 2.00 },
+                    { name: "Pipoca", price: 4.00, emoji: "🍿", paid: 5.00 },
+                    { name: "Salgado", price: 3.00, emoji: "🥟", paid: 5.00 },
+                    { name: "Sorvete", price: 8.00, emoji: "🍦", paid: 10.00 },
+                    { name: "Lanche", price: 15.00, emoji: "🍔", paid: 20.00 }
+                ]
+            },
+            {
+                id: 6,
+                name: "Troco com Moedas",
+                type: "change",
+                allowedMoney: [0.5, 1, 2, 5],
+                items: [
+                    { name: "Chiclete", price: 1.50, emoji: "🫧", paid: 2.00 },
+                    { name: "Suco", price: 3.50, emoji: "🧃", paid: 5.00 },
+                    { name: "Bolo", price: 8.50, emoji: "🍰", paid: 10.00 },
+                    { name: "Pizza Pedaço", price: 7.50, emoji: "🍕", paid: 10.00 }
+                ]
+            },
+            {
+                id: 7,
+                name: "Desafio Final do Troco",
+                type: "change",
+                allowedMoney: [1, 2, 5, 10, 20],
+                items: [
+                    { name: "Carrinho", price: 12.00, emoji: "🏎️", paid: 20.00 },
+                    { name: "Boneca", price: 30.00, emoji: "🎎", paid: 50.00 },
+                    { name: "Caderno", price: 18.00, emoji: "📓", paid: 20.00 },
+                    { name: "Jogo Novo", price: 38.00, emoji: "🎮", paid: 50.00 }
+                ]
+            }
+        ];
+
+        // Dicionário de HTML para o dinheiro
+        const moneyTemplates = {
+            "0.5": `<div onclick="addMoney(0.5)" class="money-btn coin coin-50 w-20 h-20 text-2xl">50¢</div>`,
+            "1": `<div onclick="addMoney(1)" class="money-btn coin coin-1 w-24 h-24 text-3xl">R$ 1</div>`,
+            "2": `<div onclick="addMoney(2)" class="money-btn bill bill-2 w-36 h-20 text-3xl">R$ 2</div>`,
+            "5": `<div onclick="addMoney(5)" class="money-btn bill bill-5 w-36 h-20 text-3xl">R$ 5</div>`,
+            "10": `<div onclick="addMoney(10)" class="money-btn bill bill-10 w-40 h-20 text-3xl">R$ 10</div>`,
+            "20": `<div onclick="addMoney(20)" class="money-btn bill bill-20 w-40 h-20 text-3xl">R$ 20</div>`,
+            "50": `<div onclick="addMoney(50)" class="money-btn bill bill-50 w-44 h-20 text-3xl">R$ 50</div>`
+        };
+
+        // ESTADO DO JOGO
+        let currentLevelIndex = 0;
+        let currentItemIndex = 0;
+        let selectedMoneyList = [];
+        let currentTotal = 0;
+        let currentTarget = 0; // Nova variável para guardar o valor a ser atingido (Preço ou Troco)
+        let currentType = "exact"; // Pode ser "exact" ou "change"
+
+        function startGame() {
+            document.getElementById('welcome-screen').classList.add('hidden-screen');
+            document.getElementById('game-screen').classList.remove('hidden-screen');
+            loadLevel();
+            vibrate(100);
+        }
+
+        function loadLevel() {
+            const level = gameLevels[currentLevelIndex];
+            const item = level.items[currentItemIndex];
+            
+            currentType = level.type || "exact";
+
+            // Atualiza UI do Topo
+            document.getElementById('level-indicator').textContent = level.id;
+            document.getElementById('level-name').textContent = level.name;
+            document.getElementById('item-progress').textContent = `${currentItemIndex + 1}/${level.items.length}`;
+
+            // Atualiza UI do Produto
+            document.getElementById('item-emoji').textContent = item.emoji;
+            document.getElementById('item-name').textContent = item.name;
+            document.getElementById('item-price').textContent = item.price.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+
+            // Lógica para Troco vs Preço Exato
+            const changeContainer = document.getElementById('change-container');
+            const actionTitle = document.getElementById('action-title');
+            const trayTitle = document.getElementById('tray-title');
+
+            if (currentType === "change") {
+                changeContainer.classList.remove('hidden');
+                changeContainer.classList.add('flex');
+                document.getElementById('paid-amount').textContent = `R$ ${item.paid.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+                
+                actionTitle.textContent = "O cliente comprou:";
+                trayTitle.innerHTML = `<span>Coloque o TROCO na bandeja:</span> <span class="text-sm font-normal text-gray-400">(Toque para remover)</span>`;
+                
+                currentTarget = item.paid - item.price; // O objetivo é o valor do troco
+                
+                // Atualiza a mensagem de sucesso no overlay
+                document.getElementById('success-msg').textContent = "Você deu o troco certinho!";
+            } else {
+                changeContainer.classList.add('hidden');
+                changeContainer.classList.remove('flex');
+                
+                actionTitle.textContent = "Você quer comprar:";
+                trayTitle.innerHTML = `<span>Sua Bandeja:</span> <span class="text-sm font-normal text-gray-400">(Toque para remover)</span>`;
+                
+                currentTarget = item.price; // O objetivo é o preço exato
+                
+                // Atualiza a mensagem de sucesso no overlay
+                document.getElementById('success-msg').textContent = "Você pagou certinho!";
+            }
+
+            // Atualiza a Carteira com o dinheiro permitido para este nível
+            const walletContainer = document.getElementById('wallet-container');
+            walletContainer.innerHTML = '';
+            level.allowedMoney.forEach(val => {
+                walletContainer.innerHTML += moneyTemplates[String(val)];
+            });
+
+            // Limpa a bandeja
+            clearTray();
+        }
+
+        function addMoney(val) {
+            selectedMoneyList.push({ id: Date.now() + Math.random(), value: val });
+            updateTrayUI();
+            vibrate(50);
+        }
+
+        function removeMoney(idToRemove) {
+            selectedMoneyList = selectedMoneyList.filter(item => item.id !== idToRemove);
+            updateTrayUI();
+            vibrate([30, 30]); // vibração dupla curtinha para remoção
+        }
+
+        function clearTray() {
+            selectedMoneyList = [];
+            updateTrayUI();
+        }
+
+        function updateTrayUI() {
+            const tray = document.getElementById('selected-tray');
+            tray.innerHTML = '';
+            currentTotal = 0;
+
+            selectedMoneyList.forEach(money => {
+                currentTotal += money.value;
+                
+                // Cria a representação visual na bandeja baseada no valor
+                let visualClass = "";
+                let text = "";
+                if(money.value === 0.5) { visualClass = "coin coin-50 w-16 h-16 text-lg"; text = "50¢"; }
+                else if(money.value === 1) { visualClass = "coin coin-1 w-20 h-20 text-xl"; text = "R$ 1"; }
+                else if(money.value === 2) { visualClass = "bill bill-2 w-28 h-16 text-xl"; text = "R$ 2"; }
+                else if(money.value === 5) { visualClass = "bill bill-5 w-28 h-16 text-xl"; text = "R$ 5"; }
+                else if(money.value === 10) { visualClass = "bill bill-10 w-32 h-16 text-xl"; text = "R$ 10"; }
+                else if(money.value === 20) { visualClass = "bill bill-20 w-32 h-16 text-xl"; text = "R$ 20"; }
+
+                const el = document.createElement('div');
+                el.className = `selected-money-item money-btn ${visualClass}`;
+                el.innerHTML = text;
+                el.onclick = () => removeMoney(money.id); // Clique para remover
+                
+                tray.appendChild(el);
+            });
+
+            document.getElementById('current-total').textContent = `R$ ${currentTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+
+            checkState();
+        }
+
+        function checkState() {
+            const btnPay = document.getElementById('btn-pay');
+            
+            // Margem de erro pequena para floats (ex: 0.1 + 0.2 = 0.3000000004)
+            if (Math.abs(currentTotal - currentTarget) < 0.01) {
+                // Habilita o botão PAGAR/TROCO gamificado
+                btnPay.className = "btn-3d w-full bg-green-500 text-white font-black py-6 rounded-2xl text-4xl shadow-[0_8px_0_0_#166534] pulse-green cursor-pointer";
+                btnPay.style.pointerEvents = "auto";
+                btnPay.innerHTML = currentType === "change" ? "DAR TROCO! ✅" : "PAGAR AGORA! ✅";
+            } else {
+                // Desabilita
+                btnPay.className = "btn-3d w-full bg-gray-300 text-gray-500 font-black py-6 rounded-2xl text-3xl shadow-[0_8px_0_0_#9ca3af] pointer-events-none transition-all";
+                btnPay.style.pointerEvents = "none";
+                
+                if (currentTotal > currentTarget) {
+                    btnPay.innerHTML = "PASSOU O VALOR ⚠️";
+                    btnPay.classList.replace('bg-gray-300', 'bg-red-200');
+                    btnPay.classList.replace('text-gray-500', 'text-red-600');
+                    btnPay.classList.replace('shadow-[0_8px_0_0_#9ca3af]', 'shadow-[0_8px_0_0_#991b1b]');
+                } else {
+                    btnPay.innerHTML = "FALTA DINHEIRO...";
+                }
+            }
+        }
+
+        function checkPayment() {
+            // Dispara confetes!
+            confetti({
+                particleCount: 150,
+                spread: 70,
+                origin: { y: 0.6 },
+                colors: ['#26ccff', '#a25afd', '#ff5e7e', '#88ff5a', '#fcff42']
+            });
+            
+            vibrate([100, 50, 100]);
+
+            // Mostra tela de sucesso
+            document.getElementById('success-overlay').classList.remove('hidden-screen');
+        }
+
+        function nextItem() {
+            document.getElementById('success-overlay').classList.add('hidden-screen');
+            
+            currentItemIndex++;
+            const level = gameLevels[currentLevelIndex];
+
+            // Se terminou os itens deste nível
+            if (currentItemIndex >= level.items.length) {
+                currentLevelIndex++;
+                currentItemIndex = 0;
+
+                // Se terminou todos os níveis
+                if (currentLevelIndex >= gameLevels.length) {
+                    showEndGame();
+                    return;
+                }
+            }
+
+            loadLevel();
+        }
+
+        function showEndGame() {
+            document.getElementById('game-screen').classList.add('hidden-screen');
+            document.getElementById('end-overlay').classList.remove('hidden-screen');
+            
+            // Super confete
+            const duration = 3000;
+            const end = Date.now() + duration;
+
+            (function frame() {
+                confetti({
+                    particleCount: 5,
+                    angle: 60,
+                    spread: 55,
+                    origin: { x: 0 },
+                    colors: ['#ff0000', '#00ff00', '#0000ff']
+                });
+                confetti({
+                    particleCount: 5,
+                    angle: 120,
+                    spread: 55,
+                    origin: { x: 1 },
+                    colors: ['#ff0000', '#00ff00', '#0000ff']
+                });
+
+                if (Date.now() < end) {
+                    requestAnimationFrame(frame);
+                }
+            }());
+        }
+
+        function resetGame() {
+            currentLevelIndex = 0;
+            currentItemIndex = 0;
+            document.getElementById('end-overlay').classList.add('hidden-screen');
+            document.getElementById('welcome-screen').classList.remove('hidden-screen');
+        }
+
+        // Função auxiliar para vibração no tablet (feedback tátil)
+        function vibrate(pattern) {
+            if ('vibrate' in navigator) {
+                navigator.vibrate(pattern);
+            }
+        }
+    </script>
+</body>
+</html>
